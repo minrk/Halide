@@ -1,6 +1,6 @@
 // Halide tutorial lesson 17: Reductions over non-rectangular domain
 
-// This lesson demonstrates basic usage of Halide as a JIT compiler for imaging.
+// This lesson demonstrates how to define a reduction over a non-rectangular domain
 
 // On linux, you can compile and run it like so:
 // g++ lesson_17*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_17 -std=c++11
@@ -26,10 +26,10 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
-    // In lesson 9, we learn how to use RDom to define a "reduction domain" in
+    // In lesson 9, we learned how to use RDom to define a "reduction domain" in
     // Halide update definitions. The domain defined by RDom, however, is
     // always rectangular. In some cases, we might want to iterate over some
-    // non-rectangular domain, e.g. circle. We could achieve this behavior by
+    // non-rectangular domain, e.g. a circle. We can achieve this behavior by
     // using the RDom::where directive.
 
     {
@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
         f(r1.x, r1.y) += 1;
         f.compute_root();
 
-        // While this one involves calls to other Func.
+        // While this one involves calls to another Func.
         RDom r2(0, 50, 0, 50, "r2");
         r2.where(f(r2.x, r2.y) < 30);
         g(r2.x, r2.y) += f(r2.x, r2.y);

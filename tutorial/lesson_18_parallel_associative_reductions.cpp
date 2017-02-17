@@ -1,6 +1,7 @@
-// Halide tutorial lesson 17: Factoring a reduction using rfactor
+// Halide tutorial lesson 18: Factoring an associative reduction using rfactor
 
-// This lesson demonstrates basic usage of Halide as a JIT compiler for imaging.
+// This lesson demonstrates how to parallelize or vectorize an associative
+// reduction using the scheduling directive 'rfactor'.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_18*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_18 -std=c++11
@@ -12,7 +13,7 @@
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
-//    make tutorial_lesson_18_parallel_reductions
+//    make tutorial_lesson_18_parallel_associative_reductions
 // in a shell with the current directory at the top of the halide
 // source tree.
 
@@ -30,7 +31,7 @@ using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     // Declare some Vars to use below.
-    Var x("x"), y("y"), u("u");
+    Var x("x"), y("y"), i("i"), u("u");
 
     // Load a grayscale image to use as an input.
     Buffer<uint8_t> input = load_image("images/gray.png");
@@ -39,47 +40,46 @@ int main(int argc, char **argv) {
         // As mentioned previously in lesson 9, parallelizing variables that
         // are part of the reduction domain is tricky, since there may be data
         // dependencies across those variables.
-        //
+
         // Consider the histogram example in lesson 9:
-        //
-        // Func histogram("histogram");
-        // Var x("x");
-        // histogram(x) = 0;
-        // RDom r(0, input.width(), 0, input.height());
-        // histogram(input(r.x, r.y)) += 1;
-        //
+        Func histogram("histogram");
+        histogram(x) = 0;
+        RDom r(0, input.width(), 0, input.height());
+        histogram(input(r.x, r.y)) += 1;
+
         // Since there are data dependencies across r.x and r.y in the update
         // definition (i.e. the update refers to value computed in the previous
-        // iteration), we can't parallelize r.x or r.y without introducing race
-        // condition. Note, however, the histogram operation (i.e. the sum reduction)
-        // is associative. A common trick to speed-up this type of reduction is to
-        // split the reduction into chunks. Within a chunk, the reduction is not
-        // serial, however, since chunks are independent of each other, we can
-        // parallelize in chunk granularity.
-        //
+        // iteration), we can't parallelize r.x or r.y without introducing a race
+        // condition. Note, however, that the histogram operation (i.e. the sum
+        // reduction) is associative. A common trick to speed-up this type of
+        // reduction is to split the reduction into chunks. Within a chunk, the
+        // reduction is serial, however, since chunks are independent of
+        // each other, we can parallelize across chunks.
+    }
+
+    {
         // Going back to the histogram example, we split the reduction into chunks
         // by defining an intermediate function:
-        //
-        // Func intm("intm");
-        // Var i("i"), y("y");
-        // intm(i, y) = 0;
-        // RDom rx(0, input.width());
-        // intm(input(rx, y), y) += 1;
-        //
+        Func intm("intm");
+        intm(i, y) = 0;
+        RDom rx(0, input.width());
+        intm(input(rx, y), y) += 1;
+
         // This intermediate computes the sum reductions across the x dimension
         // (denoted by rx) for each y dimension independently. The histogram function
         // now sums over the partial results across the x dimension (denoted by i)
         // computed by the intermediate function:
-        //
-        // Func histogram("histogram");
-        // histogram(i) = 0;
-        // RDom ry(0, input.height());
-        // histogram(i) += intm(i, ry);
-        //
+        Func histogram("histogram");
+        histogram(i) = 0;
+        RDom ry(0, input.height());
+        histogram(i) += intm(i, ry);
+
         // Since the intermediate no longer has data dependencies across the y dimension,
         // we can parallelize it over y:
-        // intm.compute_root().update().parallel(y);
-        //
+        intm.compute_root().update().parallel(y);
+    }
+
+    {
         // This manual factorization of an associative reduction can be tedious and
         // bug-prone. Although it's fairly easy to do manually for histogram,
         // it can get complex pretty fast -- RDom may have predicates defined over
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
         // provides a way to do this type of factorization through the scheduling
         // directive 'rfactor'. rfactor splits an associative update definition
         // into an intermediate which computes the partial results over slices of a
-        // reduction domain and replace the current update definition with a new
+        // reduction domain and replaces the current update definition with a new
         // definition which merges those partial results.
 
         // Using rfactor, we don't need to change the algorithm at all:
@@ -97,28 +97,32 @@ int main(int argc, char **argv) {
         histogram(input(r.x, r.y)) += 1;
 
         // The factoring of associative reduction is moved into the schedule,
-        // via rfactor. To generate the same code as the manually-factored
-        // version, we do the following:
-        Func intm = histogram.update().rfactor({{r.y, y}});
-        // rfactor takes as input a list of <RVar, Var> pairs, which contains all
-        // reduction variables to be removed from the original function and lifted
-        // to the intermediate function. The remaining reduction variables are
-        // made 'pure' in the intermediate function, which make them race-condition
-        // free and hence are parallelizable.
+        // via rfactor. rfactor takes as input a list of <RVar, Var> pairs,
+        // which contains list of reduction variables (RVars) to be made
+        // "parallelizable". In the intermediate, all references to this
+        // reduction variables are replaced with references to "pure" variables
+        // (the Vars). Since by construct, Vars are race-condition free, the
+        // reduction is now parallelizable across those dimensions. All reduction
+        // variables not in the list are removed from the original function and
+        // "lifted" to the intermediate.
 
-        // Since there is only one pair passed to rfactor, we could also write it
-        // this way:
+        // To generate the same code as the manually-factored version, we do the
+        // following:
+        Func intm = histogram.update().rfactor({{r.y, y}});
+        // Since there is only one pair passed to rfactor, we could also write
+        // it this way:
         // Func intm = histogram.update().rfactor(r.y, y);
 
-        // Similar to the manual version, the intermediate is parallelizable
-        // across the y dimension:
+        // Here, we pass {r.y, y} as argument to rfactor to make the histogram
+        // parallelizable across the y dimension, similar to the manually-factored
+        // version.
         intm.compute_root().update().parallel(y);
 
         // It is important to note that rfactor (or reduction factorization in
-        // general) only works for associative reductions. Associtive reduction
-        // has a nice property in which it does not change the result no matter
-        // how we group the computation (i.e. splitting into chunks). If rfactor
-        // can't prove the associativity of a reduction, it will throw an error.
+        // general) only works for associative reductions. Associative reductions
+        // have the nice property that their results are the same no matter how
+        // the computation is grouped (i.e. split into chunks). If rfactor can't
+        // prove the associativity of a reduction, it will throw an error.
 
         Buffer<int> halide_result = histogram.realize(256);
 
@@ -211,7 +215,6 @@ int main(int argc, char **argv) {
             }
         }
     }
-
 
     printf("Success!\n");
 
