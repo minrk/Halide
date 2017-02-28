@@ -109,7 +109,7 @@ public:
      * 'preserved') are made pure in the intermediate Func. The intermediate Func's
      * update definition inherits all scheduling directives (e.g. split,fuse, etc.)
      * applied to the original Func's update definition. The loop order of the
-     * intermediate Func's update definition is the same as the original, albeit
+     * intermediate Func's update definition is the same as the original, although
      * the RVars in 'preserved' are replaced by the new pure Vars. The loop order of the
      * intermediate Func's init definition from innermost to outermost is the args'
      * order of the original Func's init definition followed by the new pure Vars.

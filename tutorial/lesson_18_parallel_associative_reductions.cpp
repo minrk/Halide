@@ -99,24 +99,24 @@ int main(int argc, char **argv) {
         // The factoring of associative reduction is moved into the schedule,
         // via rfactor. rfactor takes as input a list of <RVar, Var> pairs,
         // which contains list of reduction variables (RVars) to be made
-        // "parallelizable". In the intermediate, all references to this
-        // reduction variables are replaced with references to "pure" variables
-        // (the Vars). Since by construct, Vars are race-condition free, the
-        // reduction is now parallelizable across those dimensions. All reduction
-        // variables not in the list are removed from the original function and
-        // "lifted" to the intermediate.
+        // "parallelizable". In the generated intermediate Func, all references
+        // to this reduction variables are replaced with references to "pure"
+        // variables (the Vars). Since, by construction, Vars are race-condition
+        // free, the intermediate reduction is now parallelizable across those
+        // dimensions. All reduction variables not in the list are removed from
+        // the original function and "lifted" to the intermediate.
 
         // To generate the same code as the manually-factored version, we do the
         // following:
-        Func intm = histogram.update().rfactor({{r.y, y}});
-        // Since there is only one pair passed to rfactor, we could also write
-        // it this way:
-        // Func intm = histogram.update().rfactor(r.y, y);
-
-        // Here, we pass {r.y, y} as argument to rfactor to make the histogram
+        Func intermediate = histogram.update().rfactor({{r.y, y}});
+        // We pass {r.y, y} as the argument to rfactor to make the histogram
         // parallelizable across the y dimension, similar to the manually-factored
         // version.
-        intm.compute_root().update().parallel(y);
+        intermediate.compute_root().update().parallel(y);
+
+        // Since there is only one pair passed to rfactor, we could also write
+        // the previous rfactor this way:
+        // Func intermediate = histogram.update().rfactor(r.y, y);
 
         // It is important to note that rfactor (or reduction factorization in
         // general) only works for associative reductions. Associative reductions
