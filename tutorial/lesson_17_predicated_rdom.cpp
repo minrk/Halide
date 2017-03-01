@@ -34,14 +34,14 @@ int main(int argc, char **argv) {
 
     {
         // Starting with this pure definition:
-        Func f("f");
+        Func f("circle");
         Var x("x"), y("y");
-        f(x, y) = (x + y)/100.0f;
+        f(x, y) = x + y;
 
         // Say we want an update that squares the values inside a circular region
-        // centered at (10, 10) with radius of 10. To do this, we first define
+        // centered at (3, 3) with radius of 3. To do this, we first define
         // the minimal bounding box over the circular region using RDom.
-        RDom r(0, 20, 0, 20, "r");
+        RDom r(0, 6, 0, 6, "r");
         // The bounding box does not have to be minimal. In fact, the box can be
         // of any size, as long it covers the region we'd like to update. However,
         // the tighter the bounding box, the tighter the generated loop bounds
@@ -52,33 +52,36 @@ int main(int argc, char **argv) {
         // Then, we use RDom::where to define the predicate over that bounding box,
         // such that the update is performed only if the given predicate evaluates
         // to true, i.e. within the circular region.
-        r.where((r.x - 10)*(r.x - 10) + (r.y - 10)*(r.y - 10) <= 100);
+        r.where((r.x - 3)*(r.x - 3) + (r.y - 3)*(r.y - 3) <= 9);
         // After defining the predicate, we then define the update.
-        f(r.x, r.y) = f(r.x, r.y) * f(r.x, r.y);
+        f(r.x, r.y) *= 2;
 
-        Buffer<float> halide_result = f.realize(20, 20);
+        Buffer<int> halide_result = f.realize(6, 6);
+
+        // See figures/lesson_17_rdom_circular.gif for a visualization of
+        // what this did.
 
         // The equivalent C is:
-        float c_result[20][20];
-        for (int y = 0; y < 20; y++) {
-            for (int x = 0; x < 20; x++) {
-                c_result[y][x] = (x + y)/100.0f;
+        int c_result[6][6];
+        for (int y = 0; y < 6; y++) {
+            for (int x = 0; x < 6; x++) {
+                c_result[y][x] = x + y;
             }
         }
-        for (int r_y = 0; r_y < 20; r_y++) {
-            for (int r_x = 0; r_x < 20; r_x++) {
+        for (int r_y = 0; r_y < 6; r_y++) {
+            for (int r_x = 0; r_x < 6; r_x++) {
                 // Update is only performed if the predicate evaluates to true.
-                if ((r_x - 10)*(r_x - 10) + (r_y - 10)*(r_y - 10) <= 100) {
-                    c_result[r_y][r_x] = c_result[r_y][r_x] * c_result[r_y][r_x];
+                if ((r_x - 3)*(r_x - 3) + (r_y - 3)*(r_y - 3) <= 9) {
+                    c_result[r_y][r_x] *= 2;
                 }
             }
         }
 
         // Check the results match:
-        for (int y = 0; y < 20; y++) {
-            for (int x = 0; x < 20; x++) {
-                if (fabs(halide_result(x, y) - c_result[y][x]) > 0.01f) {
-                    printf("halide_result(%d, %d) = %f instead of %f\n",
+        for (int y = 0; y < 6; y++) {
+            for (int x = 0; x < 6; x++) {
+                if (halide_result(x, y) != c_result[y][x]) {
+                    printf("halide_result(%d, %d) = %d instead of %d\n",
                            x, y, halide_result(x, y), c_result[y][x]);
                     return -1;
                 }
@@ -91,48 +94,51 @@ int main(int argc, char **argv) {
         // we want the update to happen within some triangular region. To do
         // this, we need to define three predicates, where each corresponds to
         // one side of the triangle.
-        Func f("f");
+        Func f("triangle");
         Var x("x"), y("y");
-        f(x, y) = (x + y)/100.0f;
+        f(x, y) = x + y;
         // First, let's define the minimal bounding box over the triangular
         // region.
-        RDom r(0, 75, 0, 100, "r");
+        RDom r(0, 8, 0, 10, "r");
         // Next, let's add the first predicate to the RDom using the RDom::where
         // directive.
-        r.where(r.x + r.y > 50);
+        r.where(r.x + r.y > 5);
         // Add the 2nd and the 3rd predicates.
-        r.where(3*r.y - 2*r.x < 150);
-        r.where(4*r.x - r.y < 200);
+        r.where(3*r.y - 2*r.x < 15);
+        r.where(4*r.x - r.y < 20);
 
         // We can also pack the multiple predicates into one like so:
-        // r.where((r.x + r.y > 50) && (3*r.y - 2*r.x < 150) && (4*r.x - r.y < 200));
+        // r.where((r.x + r.y > 5) && (3*r.y - 2*r.x < 15) && (4*r.x - r.y < 20));
 
         // Then define the update.
-        f(r.x, r.y) = f(r.x, r.y) * f(r.x, r.y);
+        f(r.x, r.y) *= 2;
 
-        Buffer<float> halide_result = f.realize(100, 100);
+        Buffer<int> halide_result = f.realize(10, 10);
+
+        // See figures/lesson_17_rdom_triangular.gif for a visualization of
+        // what this did.
 
         // The equivalent C is:
-        float c_result[100][100];
-        for (int y = 0; y < 100; y++) {
-            for (int x = 0; x < 100; x++) {
-                c_result[y][x] = (x + y)/100.0f;
+        int c_result[10][10];
+        for (int y = 0; y < 10; y++) {
+            for (int x = 0; x < 10; x++) {
+                c_result[y][x] = x + y;
             }
         }
-        for (int r_y = 0; r_y < 100; r_y++) {
-            for (int r_x = 0; r_x < 75; r_x++) {
+        for (int r_y = 0; r_y < 10; r_y++) {
+            for (int r_x = 0; r_x < 8; r_x++) {
                 // Update is only performed if the predicate evaluates to true.
-                if ((r_x + r_y > 50) && (3*r_y - 2*r_x < 150) && (4*r_x - r_y < 200)) {
-                    c_result[r_y][r_x] = c_result[r_y][r_x] * c_result[r_y][r_x];
+                if ((r_x + r_y > 5) && (3*r_y - 2*r_x < 15) && (4*r_x - r_y < 20)) {
+                    c_result[r_y][r_x] *= 2;
                 }
             }
         }
 
         // Check the results match:
-        for (int y = 0; y < 100; y++) {
-            for (int x = 0; x < 100; x++) {
-                if (fabs(halide_result(x, y) - c_result[y][x]) > 0.01f) {
-                    printf("halide_result(%d, %d) = %f instead of %f\n",
+        for (int y = 0; y < 10; y++) {
+            for (int x = 0; x < 10; x++) {
+                if (halide_result(x, y) != c_result[y][x]) {
+                    printf("halide_result(%d, %d) = %d instead of %d\n",
                            x, y, halide_result(x, y), c_result[y][x]);
                     return -1;
                 }
@@ -145,7 +151,7 @@ int main(int argc, char **argv) {
         // It could refer to free variables in the update definition or calls to
         // other Funcs, or make recursive calls to the same Func. Here is some
         // example:
-        Func f("f"), g("g");
+        Func f("call_f"), g("call_g");
         Var x("x"), y("y");
         f(x, y) = 2.0f * x + y;
         g(x, y) = 3.0f * x * y;
