@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
         // Say we want an update that squares the values inside a circular region
         // centered at (3, 3) with radius of 3. To do this, we first define
         // the minimal bounding box over the circular region using RDom.
-        RDom r(0, 6, 0, 6, "r");
+        RDom r(0, 7, 0, 7, "r");
         // The bounding box does not have to be minimal. In fact, the box can be
         // of any size, as long it covers the region we'd like to update. However,
         // the tighter the bounding box, the tighter the generated loop bounds
@@ -52,34 +52,34 @@ int main(int argc, char **argv) {
         // Then, we use RDom::where to define the predicate over that bounding box,
         // such that the update is performed only if the given predicate evaluates
         // to true, i.e. within the circular region.
-        r.where((r.x - 3)*(r.x - 3) + (r.y - 3)*(r.y - 3) <= 9);
+        r.where((r.x - 3)*(r.x - 3) + (r.y - 3)*(r.y - 3) <= 10);
         // After defining the predicate, we then define the update.
         f(r.x, r.y) *= 2;
 
-        Buffer<int> halide_result = f.realize(6, 6);
+        Buffer<int> halide_result = f.realize(7, 7);
 
         // See figures/lesson_17_rdom_circular.gif for a visualization of
         // what this did.
 
         // The equivalent C is:
-        int c_result[6][6];
-        for (int y = 0; y < 6; y++) {
-            for (int x = 0; x < 6; x++) {
+        int c_result[7][7];
+        for (int y = 0; y < 7; y++) {
+            for (int x = 0; x < 7; x++) {
                 c_result[y][x] = x + y;
             }
         }
-        for (int r_y = 0; r_y < 6; r_y++) {
-            for (int r_x = 0; r_x < 6; r_x++) {
+        for (int r_y = 0; r_y < 7; r_y++) {
+            for (int r_x = 0; r_x < 7; r_x++) {
                 // Update is only performed if the predicate evaluates to true.
-                if ((r_x - 3)*(r_x - 3) + (r_y - 3)*(r_y - 3) <= 9) {
+                if ((r_x - 3)*(r_x - 3) + (r_y - 3)*(r_y - 3) <= 10) {
                     c_result[r_y][r_x] *= 2;
                 }
             }
         }
 
         // Check the results match:
-        for (int y = 0; y < 6; y++) {
-            for (int x = 0; x < 6; x++) {
+        for (int y = 0; y < 7; y++) {
+            for (int x = 0; x < 7; x++) {
                 if (halide_result(x, y) != c_result[y][x]) {
                     printf("halide_result(%d, %d) = %d instead of %d\n",
                            x, y, halide_result(x, y), c_result[y][x]);
@@ -153,70 +153,73 @@ int main(int argc, char **argv) {
         // example:
         Func f("call_f"), g("call_g");
         Var x("x"), y("y");
-        f(x, y) = 2.0f * x + y;
-        g(x, y) = 3.0f * x * y;
+        f(x, y) = 2 * x + y;
+        g(x, y) = x + y;
 
         // This RDom's predicates depend on the initial value of 'f'.
-        RDom r1(0, 100, 0, 100, "r1");
-        r1.where(f(r1.x, r1.y) >= 40);
-        r1.where(f(r1.x, r1.y) != 50);
+        RDom r1(0, 5, 0, 5, "r1");
+        r1.where(f(r1.x, r1.y) >= 10);
+        r1.where(f(r1.x, r1.y) != 15);
         f(r1.x, r1.y) += 1;
         f.compute_root();
 
         // While this one involves calls to another Func.
-        RDom r2(0, 50, 0, 50, "r2");
-        r2.where(f(r2.x, r2.y) < 30);
-        g(r2.x, r2.y) += f(r2.x, r2.y);
+        RDom r2(1, 3, 1, 3, "r2");
+        r2.where(f(r2.x, r2.y) < 15);
+        g(r2.x, r2.y) += f(r2.x, r2.y)/2;
 
-        Buffer<float> halide_result_f = f.realize(100, 100);
-        Buffer<float> halide_result_g = g.realize(100, 100);
+        Buffer<int> halide_result_f = f.realize(5, 5);
+        Buffer<int> halide_result_g = g.realize(5, 5);
+
+        // See figures/lesson_17_rdom_calls_in_predicate.gif for a visualization
+        // of what this did.
 
         // The equivalent C for 'f' is:
-        float c_result_f[100][100];
-        for (int y = 0; y < 100; y++) {
-            for (int x = 0; x < 100; x++) {
-                c_result_f[y][x] = 2.0f * x + y;
+        int c_result_f[5][5];
+        for (int y = 0; y < 5; y++) {
+            for (int x = 0; x < 5; x++) {
+                c_result_f[y][x] = 2 * x + y;
             }
         }
-        for (int r1_y = 0; r1_y < 100; r1_y++) {
-            for (int r1_x = 0; r1_x < 100; r1_x++) {
+        for (int r1_y = 0; r1_y < 5; r1_y++) {
+            for (int r1_x = 0; r1_x < 5; r1_x++) {
                 // Update is only performed if the predicate evaluates to true.
-                if ((c_result_f[r1_y][r1_x] >= 40) && (c_result_f[r1_y][r1_x] != 50)) {
+                if ((c_result_f[r1_y][r1_x] >= 10) && (c_result_f[r1_y][r1_x] != 15)) {
                     c_result_f[r1_y][r1_x] += 1;
                 }
             }
         }
 
         // And, the equivalent C for 'g' is:
-        float c_result_g[100][100];
-        for (int y = 0; y < 100; y++) {
-            for (int x = 0; x < 100; x++) {
-                c_result_g[y][x] = 3.0f * x * y;
+        int c_result_g[5][5];
+        for (int y = 0; y < 5; y++) {
+            for (int x = 0; x < 5; x++) {
+                c_result_g[y][x] = x + y;
             }
         }
-        for (int r2_y = 0; r2_y < 50; r2_y++) {
-            for (int r1_x = 0; r1_x < 50; r1_x++) {
+        for (int r2_y = 1; r2_y < 4; r2_y++) {
+            for (int r1_x = 1; r1_x < 4; r1_x++) {
                 // Update is only performed if the predicate evaluates to true.
-                if (c_result_f[r2_y][r1_x] < 30) {
-                    c_result_g[r2_y][r1_x] += c_result_f[r2_y][r1_x];
+                if (c_result_f[r2_y][r1_x] < 15) {
+                    c_result_g[r2_y][r1_x] += c_result_f[r2_y][r1_x]/2;
                 }
             }
         }
 
         // Check the results match:
-        for (int y = 0; y < 100; y++) {
-            for (int x = 0; x < 100; x++) {
-                if (fabs(halide_result_f(x, y) - c_result_f[y][x]) > 0.01f) {
-                    printf("halide_result_f(%d, %d) = %f instead of %f\n",
+        for (int y = 0; y < 5; y++) {
+            for (int x = 0; x < 5; x++) {
+                if (halide_result_f(x, y) != c_result_f[y][x]) {
+                    printf("halide_result_f(%d, %d) = %d instead of %d\n",
                            x, y, halide_result_f(x, y), c_result_f[y][x]);
                     return -1;
                 }
             }
         }
-        for (int y = 0; y < 100; y++) {
-            for (int x = 0; x < 100; x++) {
-                if (fabs(halide_result_g(x, y) - c_result_g[y][x]) > 0.01f) {
-                    printf("halide_result_g(%d, %d) = %f instead of %f\n",
+        for (int y = 0; y < 5; y++) {
+            for (int x = 0; x < 5; x++) {
+                if (halide_result_g(x, y) != c_result_g[y][x]) {
+                    printf("halide_result_g(%d, %d) = %d instead of %d\n",
                            x, y, halide_result_g(x, y), c_result_g[y][x]);
                     return -1;
                 }
