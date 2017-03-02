@@ -266,6 +266,8 @@ int main(int argc, char **argv) {
         // the tiles (i.e. across rx_outer and ry_outer). This allows us to
         // parallelize the reduction across the tiles:
         intermediate.compute_root().update().parallel(u).parallel(v);
+        // Let's also reorder the dimensions to express tiled traversal:
+        intermediate.update().reorder(rx_inner, ry_inner, u, v);
 
         // Vectorize the initializations to make things faster.
         intermediate.vectorize(x, 8);
@@ -286,8 +288,8 @@ int main(int argc, char **argv) {
             }
         }
         /* parallel */ for (int v = 0; v < input.height() / 2; v++) {
+            /* parallel */ for (int u = 0; u < input.width() / 2; u++) {
                 for (int ry_inner = 0; ry_inner < 2; ry_inner++) {
-                /* parallel */ for (int u = 0; u < input.width() / 2; u++) {
                     for (int rx_inner = 0; rx_inner < 2; rx_inner++) {
                         c_intm[v][u][input(u*2 + rx_inner, v*2 + ry_inner) % 8] += 1;
                     }
