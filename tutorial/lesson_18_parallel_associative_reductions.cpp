@@ -27,7 +27,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     // Declare some Vars to use below.
-    Var x("x"), y("y"), i("i"), u("u");
+    Var x("x"), y("y"), i("i"), u("u"), v("v");
 
     // Create an input with random values.
     Buffer<uint8_t> input(8, 8, "input");
@@ -70,7 +70,6 @@ int main(int argc, char **argv) {
         intermediate(i, y) = 0;
         RDom rx(0, input.width());
         intermediate(input(rx, y) % 8, y) += 1;
-        intermediate.trace_stores();
 
         // This intermediate computes the sum reductions across the x dimension
         // (denoted by rx) for each y dimension independently. The histogram function
@@ -85,7 +84,7 @@ int main(int argc, char **argv) {
         // we can parallelize it over y:
         intermediate.compute_root().update().parallel(y);
 
-        // Vectorize the initialization to make things faster.
+        // Vectorize the initializations to make things faster.
         intermediate.vectorize(i, 8);
         histogram.vectorize(i, 8);
 
@@ -133,7 +132,7 @@ int main(int argc, char **argv) {
         // the previous rfactor this way:
         // Func intermediate = histogram.update().rfactor(r.y, y);
 
-        // Vectorize the initialization to make things faster.
+        // Vectorize the initializations to make things faster.
         intermediate.vectorize(x, 8);
         histogram.vectorize(x, 8);
 
@@ -201,7 +200,7 @@ int main(int argc, char **argv) {
         // also commutative. rfactor will ensure these properties hold and will
         // throw an error if it can't prove those properties.
 
-        // Vectorize the initialization to make things faster.
+        // Vectorize the initializations to make things faster.
         intermediate.vectorize(x, 8);
         histogram.vectorize(x, 8);
 
@@ -232,6 +231,79 @@ int main(int argc, char **argv) {
         for (int x = 0; x < 8; x++) {
             for (int r_x = 0; r_x < input.width(); r_x++) {
                 c_result[x] += c_intm[r_x][x];
+            }
+        }
+
+        // Check the answers agree:
+        for (int x = 0; x < 8; x++) {
+            if (c_result[x] != halide_result(x)) {
+                printf("halide_result(%d) = %d instead of %d\n",
+                       x, halide_result(x), c_result[x]);
+                return -1;
+            }
+        }
+    }
+
+    {
+        // Assume the input is really large and won't fit in the cache so we
+        // need to tile the computation.
+        Func histogram("hist_rfactor_tile");
+        histogram(x) = 0;
+        RDom r(0, input.width(), 0, input.height());
+        histogram(input(r.x, r.y) % 8) += 1;
+
+        // Let's first split both r.x and r.y by a factor of four.
+        RVar rx_outer("rx_outer"), rx_inner("rx_inner");
+        RVar ry_outer("ry_outer"), ry_inner("ry_inner");
+        histogram.update().split(r.x, rx_outer, rx_inner, 4);
+        histogram.update().split(r.y, ry_outer, ry_inner, 4);
+
+        // To make this run faster, let's parallelize the reduction across
+        // tiles. But since there are data dependencies across tiles, we
+        // need to use rfactor() to factor the reduction:
+        Func intermediate = histogram.update().rfactor({{rx_outer, u}, {ry_outer, v}});
+        // which produces an intermediate that is race-condition free across
+        // the tiles (i.e. across rx_outer and ry_outer). This allows us to
+        // parallelize the reduction across the tiles:
+        intermediate.compute_root().update().parallel(u).parallel(v);
+
+        // Vectorize the initializations to make things faster.
+        intermediate.vectorize(x, 8);
+        histogram.vectorize(x, 8);
+
+        Buffer<int> halide_result = histogram.realize(8);
+
+        // See figures/lesson_18_hist_rfactor_tile.gif for a visualization of
+        // what this did.
+
+        // The equivalent C is:
+        int c_intm[input.height() / 2][input.width() / 2][8];
+        for (int v = 0; v < input.height() / 2; v++) {
+            for (int u = 0; u < input.width() / 2; u++) {
+                for (int x = 0; x < 8; x++) {
+                    c_intm[v][u][x] = 0;
+                }
+            }
+        }
+        /* parallel */ for (int v = 0; v < input.height() / 2; v++) {
+                for (int ry_inner = 0; ry_inner < 2; ry_inner++) {
+                /* parallel */ for (int u = 0; u < input.width() / 2; u++) {
+                    for (int rx_inner = 0; rx_inner < 2; rx_inner++) {
+                        c_intm[v][u][input(u*2 + rx_inner, v*2 + ry_inner) % 8] += 1;
+                    }
+                }
+            }
+        }
+
+        int c_result[8];
+        for (int x = 0; x < 8; x++) {
+            c_result[x] = 0;
+        }
+        for (int x = 0; x < 8; x++) {
+            for (int ry_outer = 0; ry_outer < input.height() / 2; ry_outer++) {
+                for (int rx_outer = 0; rx_outer < input.width() / 2; rx_outer++) {
+                    c_result[x] += c_intm[ry_outer][rx_outer][x];
+                }
             }
         }
 
