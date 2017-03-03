@@ -2616,9 +2616,11 @@ public:
     static std::unique_ptr<Internal::GeneratorBase> create(const Halide::GeneratorContext &context) {
         // We must have an object of type T (not merely GeneratorBase) to call a protected method,
         // because CRTP is a weird beast.
-        T *t = new T;
+        auto t = Internal::make_unique<T>();
         t->init_from_context(context);
-        return std::unique_ptr<Internal::GeneratorBase>(t);
+        // For unique_ptr, we can't implicitly downcast from derived to base:
+        // have to move it into a unique_ptr of the base type.
+        return std::unique_ptr<Internal::GeneratorBase>(std::move(t));
     }
 
 private:
@@ -2722,7 +2724,7 @@ template <class GeneratorClass>
 class RegisterGenerator {
 public:
     RegisterGenerator(const char* generator_name) {
-        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, generator_name));
+        auto f = Internal::make_unique<Internal::SimpleGeneratorFactory>(GeneratorClass::create, generator_name);
         Internal::GeneratorRegistry::register_factory(generator_name, std::move(f));
     }
 };

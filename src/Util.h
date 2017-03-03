@@ -254,16 +254,23 @@ bool mul_would_overflow(int bits, int64_t a, int64_t b);
 #if __cplusplus >= 201402L
 
 // C++14: Use the standard implementations
-using std::integer_sequence;
-using std::make_integer_sequence;
 using std::index_sequence;
+using std::integer_sequence;
 using std::make_index_sequence;
+using std::make_integer_sequence;
+using std::make_unique;
 
 #else
 
-// C++11: std::integer_sequence (etc) is standard in C++14 but not C++11, but
-// is easily written in C++11. This is a simple version that could 
-// probably be improved.
+// C++11: Roll our own implementations.
+
+template<typename T, typename ...Args>
+std::unique_ptr<T> make_unique(Args&& ...args) {
+  return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
+// TODO: this implementation of integer_sequence is a simple version that could 
+// probably be improved to cost less at compile time.
 
 template<typename T, T... Ints> 
 struct integer_sequence {

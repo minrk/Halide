@@ -1152,7 +1152,7 @@ GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size)
 
 GeneratorBase::ParamInfo &GeneratorBase::param_info() {
     if (!param_info_ptr) {
-        param_info_ptr.reset(new ParamInfo(this, size));
+        param_info_ptr = make_unique<ParamInfo>(this, size);
     }
     return *param_info_ptr;
 }
