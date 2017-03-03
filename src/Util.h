@@ -18,6 +18,7 @@
 #include <vector>
 #include <string>
 #include <cstring>
+#include <memory>
 
 // by default, the symbol EXPORT does nothing. In windows dll builds we can define it to __declspec(dllexport)
 #if defined(_WIN32) && defined(Halide_SHARED)
